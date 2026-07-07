@@ -147,3 +147,66 @@ table.spec th { color: var(--muted); font-weight: 600; }
 
 .toolbtn { background: #fff; border: 1px solid var(--line); }
 .toolbtn.active { background: var(--pink); color: #fff; border-color: var(--pink); }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 640px) {
+  .content { padding: 10px; }
+  .topbar { padding: 8px 10px; gap: 8px; }
+  .topbar .help { display: none; } /* ตัวนับสติกเกอร์ ไม่จำเป็นบนจอเล็ก */
+  .logo span:last-child { display: none; } /* เหลือแค่โลโก้ */
+  .nav { margin-left: 0; }
+  .nav button { padding: 8px 10px; font-size: 13px; }
+  .panel { padding: 12px; }
+
+  /* touch target ใหญ่ขึ้น + กัน iOS ซูมอัตโนมัติตอนโฟกัส input */
+  button { min-height: 42px; }
+  input[type="text"], input[type="number"], select { font-size: 16px; min-height: 42px; }
+  input[type="range"] { min-height: 32px; }
+
+  .grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .dropzone { padding: 24px 12px; }
+
+  /* ซ่อนข้อความอธิบายยาวๆ บนจอเล็ก */
+  .m-hide { display: none !important; }
+  .m-only { display: inline !important; }
+}
+
+/* แสดงเฉพาะบนมือถือ */
+.m-only { display: none; }
+
+/* ---------- Floating tool bar (มือถือ, หน้า editor) ---------- */
+.float-tools { display: none; }
+@media (max-width: 640px) {
+  .float-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: fixed;
+    left: 50%;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    padding: 8px 10px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+    z-index: 60;
+  }
+  .float-tools button {
+    min-width: 46px;
+    min-height: 46px;
+    padding: 0;
+    font-size: 19px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+  }
+  .float-tools .sep {
+    width: 1px;
+    height: 28px;
+    background: var(--line);
+    margin: 0 2px;
+  }
+  /* เว้นที่ท้ายหน้าไม่ให้บาร์ลอยบังเนื้อหา */
+  .content { padding-bottom: 90px; }
+}

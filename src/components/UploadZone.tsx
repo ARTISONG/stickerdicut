@@ -113,17 +113,19 @@ export function UploadZone() {
           ))}
         </div>
         <div className="row" style={{ marginBottom: 14 }}>
-          <button className={mode === 'single' ? 'toolbtn active' : 'toolbtn'} onClick={() => setMode('single')}>
-            🖼️ ไฟล์เดี่ยว (1 ไฟล์ = 1 สติกเกอร์)
+          <button className={mode === 'single' ? 'toolbtn active' : 'toolbtn'} onClick={() => setMode('single')}
+            title="1 ไฟล์ = 1 สติกเกอร์">
+            🖼️ ไฟล์เดี่ยว
           </button>
           <button className={mode === 'grid' ? 'toolbtn active' : 'toolbtn'} onClick={() => setMode('grid')}>
-            ▦ แยกแบบตาราง
+            ▦ ตาราง
           </button>
           <button className={mode === 'auto' ? 'toolbtn active' : 'toolbtn'} onClick={() => setMode('auto')}>
-            ✨ แยกอัตโนมัติ
+            ✨ อัตโนมัติ
           </button>
-          <button className={mode === 'crop' ? 'toolbtn active' : 'toolbtn'} onClick={() => setMode('crop')}>
-            ✂️ ครอปเอง (free-form)
+          <button className={mode === 'crop' ? 'toolbtn active' : 'toolbtn'} onClick={() => setMode('crop')}
+            title="ลากวาดกรอบรอบสติกเกอร์เอง (free-form)">
+            ✂️ ครอปเอง
           </button>
         </div>
 

@@ -30,6 +30,18 @@ const fromHex = (h: string): [number, number, number] => [
 ]
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
 
+/** ไอคอนแปรงวงกลม พร้อมเครื่องหมาย - (ลบ) หรือ + (คืนค่า) */
+function BrushIcon({ sign, size = 16 }: { sign: '-' | '+'; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={2} strokeLinecap="round" style={{ display: 'block', flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="9" />
+      <line x1="7.5" y1="12" x2="16.5" y2="12" />
+      {sign === '+' && <line x1="12" y1="7.5" x2="12" y2="16.5" />}
+    </svg>
+  )
+}
+
 export function EditScreen() {
   const selectedId = useStore((s) => s.selectedId)
   const sticker = useStore((s) => s.stickers.find((x) => x.id === selectedId) ?? null)
@@ -48,6 +60,9 @@ export function EditScreen() {
   const view = useRef({ scale: 1, tx: 0, ty: 0 })
   const painting = useRef(false)
   const panning = useRef<{ sx: number; sy: number; tx0: number; ty0: number } | null>(null)
+  /** pointer ที่กดค้างอยู่ (สำหรับ pinch zoom บนมือถือ) */
+  const pointers = useRef(new Map<number, { vx: number; vy: number }>())
+  const pinch = useRef<{ d0: number; scale0: number; cx0: number; cy0: number; tx0: number; ty0: number } | null>(null)
   const spaceHeld = useRef(false)
   const showGhostRef = useRef(true)
   const showFrameRef = useRef(true)
@@ -320,13 +335,41 @@ export function EditScreen() {
 
   const wantPan = (e: React.PointerEvent) => tool === 'pan' || spaceHeld.current || e.button === 1
 
+  /** ปิดสโตรกที่ค้าง (บันทึกเข้า undo) — ใช้ตอนนิ้วที่สองแตะจอเพื่อเข้าโหมด pinch */
+  function commitStroke() {
+    if (!painting.current) return
+    painting.current = false
+    if (workMask.current && sticker) {
+      if (strokeSnapshot.current) { pushUndo(strokeSnapshot.current); strokeSnapshot.current = null }
+      updateMask(sticker.id, workMask.current.slice())
+    }
+  }
+
   function onDown(e: React.PointerEvent) {
     if (!sticker) return
     const { vx, vy, ix, iy } = coords(e)
+    pointers.current.set(e.pointerId, { vx, vy })
+    try { displayRef.current!.setPointerCapture(e.pointerId) } catch { /* pointer สังเคราะห์ */ }
+
+    // นิ้วที่สอง = เริ่ม pinch zoom (มือถือ)
+    if (pointers.current.size === 2) {
+      commitStroke()
+      panning.current = null
+      hideRing()
+      const [a, b] = [...pointers.current.values()]
+      pinch.current = {
+        d0: Math.hypot(a.vx - b.vx, a.vy - b.vy) || 1,
+        scale0: view.current.scale,
+        cx0: (a.vx + b.vx) / 2, cy0: (a.vy + b.vy) / 2,
+        tx0: view.current.tx, ty0: view.current.ty,
+      }
+      return
+    }
+    if (pinch.current) return // นิ้วที่สามขึ้นไป ไม่สนใจ
+
     if (wantPan(e)) {
       e.preventDefault()
       panning.current = { sx: vx, sy: vy, tx0: view.current.tx, ty0: view.current.ty }
-      displayRef.current!.setPointerCapture(e.pointerId)
       return
     }
     if (tool === 'pick') {
@@ -343,7 +386,6 @@ export function EditScreen() {
     if (!workMask.current) return
     painting.current = true
     strokeSnapshot.current = workMask.current.slice() // เก็บไว้ทำ undo
-    displayRef.current!.setPointerCapture(e.pointerId)
     stamp(ix, iy)
     buildPreview()
     renderView()
@@ -365,32 +407,48 @@ export function EditScreen() {
     ring.style.borderColor = tool === 'erase' ? 'rgba(230,40,40,0.95)' : 'rgba(30,180,90,0.95)'
   }
   function hideRing() { if (ringRef.current) ringRef.current.style.display = 'none' }
-  function onLeave() { hideRing(); onUp() }
+  function onLeave(e: React.PointerEvent) { hideRing(); onUp(e) }
 
   function onMove(e: React.PointerEvent) {
+    const c = coords(e)
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { vx: c.vx, vy: c.vy })
+
+    // pinch zoom สองนิ้ว (มือถือ)
+    if (pinch.current && pointers.current.size >= 2) {
+      const [a, b] = [...pointers.current.values()]
+      const p = pinch.current
+      const d = Math.hypot(a.vx - b.vx, a.vy - b.vy) || 1
+      const cx = (a.vx + b.vx) / 2, cy = (a.vy + b.vy) / 2
+      const ns = clamp(p.scale0 * (d / p.d0), MIN_SCALE, MAX_SCALE)
+      const k = ns / p.scale0
+      view.current.scale = ns
+      // ตรึงจุดกึ่งกลางนิ้วไว้กับภาพ + เลื่อนตามนิ้ว
+      view.current.tx = cx - (p.cx0 - p.tx0) * k
+      view.current.ty = cy - (p.cy0 - p.ty0) * k
+      setZoomPct(Math.round(ns * 100))
+      renderView()
+      return
+    }
+
     updateRing(e)
     if (panning.current) {
-      const { vx, vy } = coords(e)
-      view.current.tx = panning.current.tx0 + (vx - panning.current.sx)
-      view.current.ty = panning.current.ty0 + (vy - panning.current.sy)
+      view.current.tx = panning.current.tx0 + (c.vx - panning.current.sx)
+      view.current.ty = panning.current.ty0 + (c.vy - panning.current.sy)
       renderView()
       return
     }
     if (!painting.current) return
-    const { ix, iy } = coords(e)
-    stamp(ix, iy)
+    stamp(c.ix, c.iy)
     buildPreview()
     renderView()
   }
 
-  function onUp() {
+  function onUp(e?: React.PointerEvent) {
+    if (e) pointers.current.delete(e.pointerId)
+    else pointers.current.clear()
+    if (pinch.current && pointers.current.size < 2) pinch.current = null
     if (panning.current) { panning.current = null; return }
-    if (!painting.current) return
-    painting.current = false
-    if (workMask.current && sticker) {
-      if (strokeSnapshot.current) { pushUndo(strokeSnapshot.current); strokeSnapshot.current = null }
-      updateMask(sticker.id, workMask.current.slice())
-    }
+    commitStroke()
   }
 
   // ---- ประวัติ undo/redo (สูงสุด 10 เวอร์ชัน) ----
@@ -476,9 +534,10 @@ export function EditScreen() {
         <h2 style={{ margin: 0 }}>✏️ แก้ไข: {sticker.name}</h2>
         <div className="row">
           {sticker.origin && (
-            <button className="btn-ghost" onClick={() => setShowReframe(true)}>🖼️ ปรับกรอบจากภาพต้นฉบับ</button>
+            <button className="btn-ghost" onClick={() => setShowReframe(true)}
+              title="ปรับกรอบครอปใหม่จากภาพต้นฉบับ (กันหัว/ตัวขาด)">🖼️ ปรับกรอบ</button>
           )}
-          <button className="btn-primary" onClick={() => setScreen('manage')}>เสร็จแล้ว → กลับ</button>
+          <button className="btn-primary" onClick={() => setScreen('manage')}>✔ เสร็จ</button>
         </div>
       </div>
 
@@ -495,13 +554,13 @@ export function EditScreen() {
 
       <div className="row" style={{ alignItems: 'flex-start', gap: 24 }}>
         {/* พื้นที่วาด */}
-        <div>
+        <div style={{ flex: '1 1 320px', minWidth: 260, maxWidth: VIEW_W }}>
           {/* แถบ zoom / pan */}
           <div className="row" style={{ marginBottom: 8, gap: 6 }}>
             <button className="btn-ghost" style={{ padding: '4px 8px' }} onClick={() => zoomStep(-1)} title="ซูมออก 1%">➖</button>
             <input type="range" min={0} max={1000} value={scaleToSlider(zoomPct / 100)}
               onChange={(e) => zoomToScale(sliderToScale(+e.target.value))}
-              style={{ width: 120 }} title="ปรับซูมละเอียด" />
+              className="m-hide" style={{ width: 120 }} title="ปรับซูมละเอียด" />
             <button className="btn-ghost" style={{ padding: '4px 8px' }} onClick={() => zoomStep(1)} title="ซูมเข้า 1%">➕</button>
             <input type="number" value={zoomPct} min={5} max={3200} step={1}
               onChange={(e) => zoomToScale(clamp(+e.target.value, 5, 3200) / 100)}
@@ -526,13 +585,13 @@ export function EditScreen() {
             </label>
           </div>
 
-          <div className="checker" style={{ position: 'relative', display: 'inline-block', lineHeight: 0, borderRadius: 8, border: '1px solid var(--line)', width: VIEW_W, height: VIEW_H, overflow: 'hidden' }}>
+          <div className="checker" style={{ position: 'relative', display: 'block', lineHeight: 0, borderRadius: 8, border: '1px solid var(--line)', width: '100%', maxWidth: VIEW_W, aspectRatio: `${VIEW_W} / ${VIEW_H}`, overflow: 'hidden' }}>
             {sticker.processing
-              ? <div style={{ width: VIEW_W, height: VIEW_H, display: 'grid', placeItems: 'center' }}><div className="spin" /></div>
+              ? <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><div className="spin" /></div>
               : <canvas ref={displayRef}
-                  onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
+                  onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
                   onPointerEnter={updateRing} onPointerLeave={onLeave}
-                  style={{ cursor, touchAction: 'none', width: VIEW_W, height: VIEW_H }} />}
+                  style={{ cursor, touchAction: 'none', width: '100%', height: '100%' }} />}
             {/* วงแหวนแสดงขนาดแปรง */}
             <div ref={ringRef} style={{
               position: 'absolute', left: 0, top: 0, display: 'none',
@@ -543,18 +602,20 @@ export function EditScreen() {
             }} />
           </div>
           <div className="help" style={{ marginTop: 8 }}>
-            {tool === 'pick' ? '💧 คลิกบนพื้นหลังในภาพเพื่อดูดสีที่จะตัด'
-              : tool === 'pan' ? '✋ ลากเพื่อเลื่อนภาพ · หมุนล้อเมาส์เพื่อซูม'
-              : tool === 'magic' ? '🪄 จิ้มสีที่ต้องการลบ — ดูดทุกเฉดของโทนนั้นออกทั้งภาพ'
-              : `ลากเมาส์เพื่อ${tool === 'erase' ? 'ลบพื้นหลัง' : 'คืนส่วนที่ถูกตัดเกิน'} · ล้อเมาส์=ซูม · Space/ปุ่มกลาง=เลื่อน`}
-            {' · '}ขนาดจริง {w}×{h}px
+            {tool === 'pick' ? '💧 แตะสีบนภาพเพื่อดูดสีที่จะตัด'
+              : tool === 'pan' ? '✋ ลากเพื่อเลื่อนภาพ'
+              : tool === 'magic' ? '🪄 จิ้มสีที่ต้องการลบ — ดูดทุกเฉดของโทนนั้น'
+              : `ลากเพื่อ${tool === 'erase' ? 'ลบพื้นหลัง' : 'คืนส่วนที่ถูกลบ'}`}
+            <span className="m-hide">{tool !== 'pick' && tool !== 'magic' ? ' · ล้อเมาส์=ซูม · Space/ปุ่มกลาง=เลื่อน' : ''}</span>
+            <span className="m-only"> · 2 นิ้ว=ซูม/เลื่อน</span>
+            {' · '}{w}×{h}px
           </div>
           {showFrame && (
             <div className="help" style={{ marginTop: 2 }}>
               <span style={{ color: 'rgb(20,120,255)', fontWeight: 700 }}>▭ กรอบ export {stickerW}×{stickerH}</span>
               {' · '}
               <span style={{ color: 'rgb(230,30,30)', fontWeight: 700 }}>▭ เขตปลอดภัย (เว้นขอบ {frameMargin}px)</span>
-              {' — ตัวสติกเกอร์จะถูกจัดกึ่งกลางในกรอบนี้ตอน export'}
+              <span className="m-hide">{' — ตัวสติกเกอร์จะถูกจัดกึ่งกลางในกรอบนี้ตอน export'}</span>
             </div>
           )}
         </div>
@@ -577,8 +638,9 @@ export function EditScreen() {
                 <label>สีพื้นหลังที่จะตัด</label>
                 <div className="row">
                   <button className={tool === 'pick' ? 'toolbtn active' : 'toolbtn'}
-                    onClick={() => setTool(tool === 'pick' ? 'erase' : 'pick')}>
-                    💧 ดูดสี (คลิกบนภาพ)
+                    onClick={() => setTool(tool === 'pick' ? 'erase' : 'pick')}
+                    title="เปิดแล้วแตะสีบนภาพเพื่อเลือกสีที่จะตัด">
+                    💧 ดูดสี
                   </button>
                   <span title="สีที่จะตัดออก" style={{
                     width: 30, height: 30, borderRadius: 6, border: '1px solid var(--line)',
@@ -612,8 +674,10 @@ export function EditScreen() {
           <div className="field" style={{ marginBottom: 14 }}>
             <label>เครื่องมือแปรง</label>
             <div className="row">
-              <button className={tool === 'erase' ? 'toolbtn active' : 'toolbtn'} onClick={() => setTool('erase')}>🧽 ลบ</button>
-              <button className={tool === 'restore' ? 'toolbtn active' : 'toolbtn'} onClick={() => setTool('restore')}>↩︎ คืนค่า</button>
+              <button className={tool === 'erase' ? 'toolbtn active' : 'toolbtn'} onClick={() => setTool('erase')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><BrushIcon sign="-" /> ลบ</button>
+              <button className={tool === 'restore' ? 'toolbtn active' : 'toolbtn'} onClick={() => setTool('restore')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><BrushIcon sign="+" /> คืนค่า</button>
               <button className={tool === 'magic' ? 'toolbtn active' : 'toolbtn'} onClick={() => setTool('magic')}>🪄 ลบสีอัตโนมัติ</button>
             </div>
           </div>
@@ -638,8 +702,9 @@ export function EditScreen() {
             <input type="range" min={0} max={12} value={edgeErode} onChange={(e) => setEdgeErode(+e.target.value)} />
           </div>
           <div className="row" style={{ marginBottom: 14 }}>
-            <button className="btn-ghost" onClick={smoothEdges}>✨ ทำขอบให้เนียน / ตัดขอบเงา</button>
-            <span className="help" style={{ alignSelf: 'center' }}>กัดขอบเข้า {edgeErode}px เพื่อตัดเงา/ฟรินจ์</span>
+            <button className="btn-ghost" onClick={smoothEdges}
+              title="กัดขอบเข้าเนื้อภาพตามค่าด้านบน แล้วเกลี่ยขอบให้เนียน">✨ ขอบเนียน/ตัดเงา</button>
+            <span className="help m-hide" style={{ alignSelf: 'center' }}>กัดขอบเข้า {edgeErode}px เพื่อตัดเงา/ฟรินจ์</span>
           </div>
 
           <hr className="hr" />
@@ -668,11 +733,26 @@ export function EditScreen() {
             <span className="help">สติกเกอร์จัดกึ่งกลาง เว้นขอบเท่ากันทุกด้านเพื่อความสมดุล</span>
           </div>
 
-          <div className="help" style={{ marginTop: 12 }}>
-            เคล็ดลับ: ถ้า auto-crop ตัด “หัว/ตัว” ขาด กด <b>🖼️ ปรับกรอบจากภาพต้นฉบับ</b> เพื่อขยายกรอบให้ครบ ·
+          <div className="help m-hide" style={{ marginTop: 12 }}>
+            เคล็ดลับ: ถ้า auto-crop ตัด “หัว/ตัว” ขาด กด <b>🖼️ ปรับกรอบ</b> เพื่อขยายกรอบให้ครบ ·
             ซูม (ล้อเมาส์) + เลื่อน (Space/✋) เพื่อเก็บขอบด้วยแปรง “คืนค่า”
           </div>
         </div>
+      </div>
+
+      {/* Floating bar เครื่องมือแปรง + undo/redo (เฉพาะมือถือ) */}
+      <div className="float-tools">
+        <button className={tool === 'erase' ? 'toolbtn active' : 'toolbtn'}
+          onClick={() => setTool('erase')} title="แปรงลบ"><BrushIcon sign="-" size={22} /></button>
+        <button className={tool === 'restore' ? 'toolbtn active' : 'toolbtn'}
+          onClick={() => setTool('restore')} title="แปรงคืนค่า"><BrushIcon sign="+" size={22} /></button>
+        <button className={tool === 'magic' ? 'toolbtn active' : 'toolbtn'}
+          onClick={() => setTool('magic')} title="ลบสีอัตโนมัติ (จิ้มสี)">🪄</button>
+        <button className={tool === 'pan' ? 'toolbtn active' : 'toolbtn'}
+          onClick={() => setTool(tool === 'pan' ? 'erase' : 'pan')} title="เลื่อนภาพ">✋</button>
+        <span className="sep" />
+        <button className="toolbtn" disabled={!canUndo} onClick={undo} title="เลิกทำ">↶</button>
+        <button className="toolbtn" disabled={!canRedo} onClick={redo} title="ทำซ้ำ">↷</button>
       </div>
     </div>
   )

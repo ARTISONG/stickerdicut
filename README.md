@@ -62,6 +62,36 @@ src/
   store.ts        สถานะรวม (zustand)
 ```
 
+## 🚀 Publish ขึ้น GitHub + เปิด GitHub Actions (Pages)
+
+> โปรเจกต์นี้ init + commit แรกไว้แล้ว — ถ้าเริ่มจากศูนย์ให้ทำตั้งแต่ข้อ 1, ถ้ามี repo local แล้วข้ามไปข้อ 3
+
+```bash
+# 1) สร้าง git repo และตั้ง branch หลักเป็น main
+git init -b main
+
+# 2) stage + commit ครั้งแรก
+git add .
+git commit -m "Initial commit"
+
+# 3) สร้าง repo ว่างบน GitHub (เว็บ https://github.com/new — อย่าติ๊ก README/.gitignore)
+#    แล้วผูก remote (แทน <user>/<repo> ด้วยของจริง)
+git remote add origin https://github.com/<user>/<repo>.git
+
+# 4) push ขึ้น GitHub ครั้งแรก
+git push -u origin main
+
+# 5) ครั้งถัดไป: ดึงของใหม่ก่อนแล้วค่อย push
+git pull --rebase origin main
+git push
+```
+
+**เปิด GitHub Actions deploy อัตโนมัติ:**
+1. Workflow อยู่ที่ [.github/workflows/deploy.yml](.github/workflows/deploy.yml) แล้ว (push ขึ้นไปพร้อมโค้ด)
+2. บน GitHub: **Settings → Pages → Build and deployment → Source = "GitHub Actions"**
+3. ทุกครั้งที่ push เข้า `main` → build + deploy อัตโนมัติ (ดูสถานะที่แท็บ **Actions**)
+4. เว็บจะอยู่ที่ `https://<user>.github.io/<repo>/`
+
 ## เทคโนโลยี
 
 React 18 · Vite · TypeScript · Canvas API · `@imgly/background-removal` · JSZip · Zustand
