@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CutMethod, OriginRef, ProjectMeta, Rect, Screen, Sticker } from './types'
+import type { CutMethod, OriginRef, ProjectMeta, Rect, Screen, Sticker, StickerLayout } from './types'
 import { DEFAULT_BORDER, DEFAULT_CHROMA_TOLERANCE, DEFAULT_MARGIN, SIZE_PRESETS, SPEC, toEven } from './constants'
 import { computeMask } from './lib/pipeline'
 import { cropCanvas } from './lib/canvas'
@@ -60,6 +60,7 @@ interface State {
   setChromaColor: (id: string, color: [number, number, number] | null) => void
   setBorder: (id: string, w: number) => void
   setEnhance: (id: string, v: number) => void
+  setLayout: (id: string, layout: StickerLayout | null) => void
   updateMask: (id: string, mask: Uint8ClampedArray) => void
   recomputeMask: (id: string) => Promise<void>
   aiCutAll: () => Promise<void>
@@ -69,7 +70,7 @@ interface State {
 }
 
 const initialMeta: ProjectMeta = {
-  name: 'สติกเกอร์ชุดใหม่',
+  name: 'dicut-stickers',
   targetCount: 8,
   locked: false,
   mainStickerId: null,
@@ -120,6 +121,7 @@ export const useStore = create<State>((set, get) => ({
       chromaColor: null,
       borderWidth: border,
       enhance: 0,
+      layout: null,
       mask: null,
       maskWidth: it.source.width,
       maskHeight: it.source.height,
@@ -166,6 +168,7 @@ export const useStore = create<State>((set, get) => ({
       stickers: s.stickers.map((z) =>
         z.id === id
           ? { ...z, source: src, maskWidth: w, maskHeight: h, mask: null, processing: true,
+              layout: null,
               origin: { image: stk.origin!.image, rect: { x, y, w, h } } }
           : z,
       ),
@@ -210,6 +213,11 @@ export const useStore = create<State>((set, get) => ({
       stickers: s.stickers.map((x) =>
         x.id === id ? { ...x, enhance: Math.max(0, Math.min(1, v)) } : x,
       ),
+    })),
+
+  setLayout: (id, layout) =>
+    set((s) => ({
+      stickers: s.stickers.map((x) => (x.id === id ? { ...x, layout } : x)),
     })),
 
   updateMask: (id, mask) =>

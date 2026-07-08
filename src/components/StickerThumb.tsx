@@ -24,7 +24,7 @@ export function StickerThumb({ sticker, width, height, margin = 0 }: Props) {
     ctx.clearRect(0, 0, out.width, out.height)
     ctx.drawImage(out, 0, 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sticker.mask, sticker.borderWidth, sticker.enhance, sticker.maskWidth, sticker.maskHeight, width, height, margin])
+  }, [sticker.mask, sticker.borderWidth, sticker.enhance, sticker.layout, sticker.maskWidth, sticker.maskHeight, width, height, margin])
 
   return <canvas ref={ref} style={{ maxWidth: '100%', maxHeight: '100%', display: 'block' }} />
 }

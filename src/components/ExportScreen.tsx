@@ -87,12 +87,6 @@ export function ExportScreen() {
             ⚠️ มี {notReady.length} ตัวที่ยังตัดพื้นหลังไม่เสร็จ/ไม่มีเนื้อภาพ จะไม่ถูกใส่ใน ZIP
           </div>
         )}
-        {!meta.locked && (
-          <div className="help" style={{ marginBottom: 12 }}>
-            💡 ชุดยังไม่ล็อก — ยังปรับจำนวน/แก้ไขได้ ล็อกที่หน้า “จัดการ” เมื่อพร้อมยื่นพิจารณา
-          </div>
-        )}
-
         <div className="row">
           <button className="btn-primary" onClick={build} disabled={building || ready.length === 0}>
             {building ? `กำลังสร้าง… ${progress}%` : `📦 สร้าง ZIP (${ready.length} ตัว + main + tab)`}

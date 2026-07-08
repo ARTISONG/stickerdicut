@@ -70,6 +70,7 @@ export interface ComposeResult {
  * @param mask alpha mask (0-255) ขนาดเท่า src
  * @param borderWidth ความหนาขอบขาว (px)
  * @param pad ระยะเว้นขอบโปร่งใสรอบนอก (px)
+ * @param trim false = คืนผืนผ้าใบขนาดเท่าต้นฉบับ (ไม่ crop — ใช้กับ manual layout)
  */
 export function composeSticker(
   src: ImageBitmap | HTMLCanvasElement,
@@ -79,6 +80,7 @@ export function composeSticker(
   borderWidth: number,
   pad = 2,
   enhance = 0,
+  trim = true,
 ): ComposeResult {
   const w = maskW
   const h = maskH
@@ -86,9 +88,13 @@ export function composeSticker(
   // geometry ขอบขาว: dilate จาก binary (ขอบนอกคม) — bbox รวมขอบด้วย
   const dil = dilate(bin, w, h, borderWidth)
 
-  const box = bbox(dil, w, h)
+  let box = bbox(dil, w, h)
   if (!box) {
     return { canvas: createCanvas(2, 2), empty: true }
+  }
+  if (!trim) {
+    box = { x: 0, y: 0, w, h }
+    pad = 0
   }
 
   const srcImg = toImageData(src)

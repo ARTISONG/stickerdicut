@@ -18,7 +18,6 @@ export function App() {
         </div>
         <nav className="nav">
           <button className={screen === 'manage' ? 'active' : ''} onClick={() => setScreen('manage')}>จัดการสติกเกอร์</button>
-          <button className={screen === 'edit' ? 'active' : ''} onClick={() => setScreen('edit')}>แก้ไข</button>
           <button className={screen === 'export' ? 'active' : ''} onClick={() => setScreen('export')}>ส่งออก</button>
         </nav>
         <div className="spacer" />

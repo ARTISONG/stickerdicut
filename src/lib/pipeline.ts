@@ -46,6 +46,28 @@ export function renderSticker(
     c.height = toEven(targetH)
     return c
   }
+
+  // โหมดจัดวางเอง: วาดภาพ die-cut (ไม่ trim) ตามตำแหน่ง/สเกลที่ผู้ใช้จัดในกรอบ
+  if (sticker.layout) {
+    const L = sticker.layout
+    const composed = composeSticker(
+      sticker.source, sticker.mask, sticker.maskWidth, sticker.maskHeight,
+      sticker.borderWidth, 0, sticker.enhance, false,
+    )
+    const fw = toEven(L.frameW)
+    const fh = toEven(L.frameH)
+    const frame = document.createElement('canvas')
+    frame.width = fw
+    frame.height = fh
+    const ctx = frame.getContext('2d')!
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(composed.canvas, L.ox, L.oy, composed.canvas.width * L.k, composed.canvas.height * L.k)
+    if (fw === toEven(targetW) && fh === toEven(targetH)) return frame
+    // ขนาดอื่น (main/tab): ย่อทั้งเฟรมลงแบบ contain โดยคงการจัดวางเดิม
+    return fitInto(frame, targetW, targetH, 0)
+  }
+
   const composed = composeSticker(
     sticker.source,
     sticker.mask,

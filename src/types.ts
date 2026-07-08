@@ -31,6 +31,19 @@ export interface OriginRef {
   rect: Rect
 }
 
+/**
+ * การจัดวางเอง (manual layout) ในกรอบ export:
+ * วาดภาพต้นฉบับ (หลัง die-cut ไม่ trim) ที่ scale k, ตำแหน่ง (ox,oy)
+ * บนผืนผ้าใบ frameW×frameH
+ */
+export interface StickerLayout {
+  k: number
+  ox: number
+  oy: number
+  frameW: number
+  frameH: number
+}
+
 /** สติกเกอร์หนึ่งตัวในชุด */
 export interface Sticker {
   id: string
@@ -49,6 +62,8 @@ export interface Sticker {
   borderWidth: number
   /** ระดับเพิ่มความสดใสของสี (0 = ปิด, ~1 = สดใสสุด) */
   enhance: number
+  /** จัดวางเองในกรอบ export (null = จัดกึ่งกลางอัตโนมัติ) */
+  layout: StickerLayout | null
   /**
    * Alpha mask ล่าสุดหลังตัด (Uint8ClampedArray ขนาด w*h, 0-255)
    * ใช้เป็นฐานสำหรับการแต่งด้วยแปรง

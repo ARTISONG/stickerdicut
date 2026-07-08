@@ -19,6 +19,7 @@ export const SPEC = {
 /** พรีเซ็ตขนาดสติกเกอร์ให้เลือกใน dropdown */
 export const SIZE_PRESETS: SizePreset[] = [
   { id: 'line-max', label: 'LINE สูงสุด — 370 × 320', width: 370, height: 320 },
+  { id: 'emoji-180', label: 'Emoji — 180 × 180 (แท็บ 96 × 74)', width: 180, height: 180 },
   { id: 'square-320', label: 'จตุรัส — 320 × 320', width: 320, height: 320 },
   { id: 'square-296', label: 'จตุรัส — 296 × 296', width: 296, height: 296 },
   { id: 'square-240', label: 'จตุรัส — 240 × 240', width: 240, height: 240 },

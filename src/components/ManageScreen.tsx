@@ -16,7 +16,7 @@ export function ManageScreen() {
   const tabW = useStore((s) => s.tabW)
   const tabH = useStore((s) => s.tabH)
   const aiBatch = useStore((s) => s.aiBatch)
-  const { setName, setTargetCount, toggleLock, setStickerSize, setDefaultBorder, setFrameMargin, setMainSize, setTabSize, removeSticker, openEditor, aiCutAll } = useStore()
+  const { setStickerSize, setDefaultBorder, setFrameMargin, setMainSize, setTabSize, removeSticker, openEditor, aiCutAll } = useStore()
 
   const matchPreset = SIZE_PRESETS.find((p) => p.width === stickerW && p.height === stickerH)
   const [presetId, setPresetId] = useState(matchPreset ? matchPreset.id : 'custom')
@@ -27,36 +27,14 @@ export function ManageScreen() {
     if (p) setStickerSize(p.width, p.height)
   }
 
-  const emptySlots = Math.max(0, meta.targetCount - stickers.length)
-
   return (
     <>
       <div className="panel">
-        <h2>ตั้งค่าชุดสติกเกอร์</h2>
-        <div className="sub">กำหนดจำนวนและขนาด — เปลี่ยนจำนวนได้จนกว่าจะกดล็อก (ยื่นพิจารณา)</div>
-        <div className="row" style={{ alignItems: 'flex-end' }}>
-          <div className="field" style={{ flex: '1 1 220px' }}>
-            <label>ชื่อชุด</label>
-            <input type="text" value={meta.name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>จำนวนสติกเกอร์</label>
-            <input type="number" min={1} max={40} value={meta.targetCount} disabled={meta.locked}
-              onChange={(e) => setTargetCount(+e.target.value)} style={{ width: 110 }} />
-          </div>
-          <div className="field">
-            <label>สถานะชุด</label>
-            <button className={meta.locked ? 'btn-danger' : 'btn-ghost'} onClick={toggleLock}>
-              {meta.locked ? '🔒 ล็อกแล้ว (ปลดล็อก)' : '🔓 ล็อกชุด / ยื่นพิจารณา'}
-            </button>
-          </div>
-        </div>
-
-        <hr className="hr" />
-
+        <h2>ขนาดสติกเกอร์ (export)</h2>
+        <div className="sub">เลือกขนาด ขอบขาว และระยะเว้นขอบ — ทุกรูปจะถูก export ตามนี้</div>
         <div className="row" style={{ alignItems: 'flex-end' }}>
           <div className="field">
-            <label>ขนาดสติกเกอร์ (export)</label>
+            <label>ขนาด</label>
             <select value={presetId} onChange={(e) => onPreset(e.target.value)}>
               {SIZE_PRESETS.map((p) => (
                 <option key={p.id} value={p.id}>{p.label}</option>
@@ -124,7 +102,7 @@ export function ManageScreen() {
 
       <div className="panel">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h2>สติกเกอร์ในชุด ({stickers.length}/{meta.targetCount})</h2>
+          <h2>สติกเกอร์ในชุด ({stickers.length})</h2>
           <button className="btn-ghost" onClick={aiCutAll}
             disabled={!!aiBatch || stickers.length === 0}>
             {aiBatch ? `🤖 กำลังตัด AI… ${aiBatch.done}/${aiBatch.total}` : '🤖 ตัดด้วย AI ทั้งชุด'}
@@ -153,9 +131,6 @@ export function ManageScreen() {
                 <button className="btn-danger" style={{ padding: '4px 8px' }} onClick={() => removeSticker(s.id)}>🗑️</button>
               </div>
             </div>
-          ))}
-          {Array.from({ length: emptySlots }).map((_, i) => (
-            <div className="slot-empty" key={`empty-${i}`}>+ ว่าง</div>
           ))}
         </div>
       </div>

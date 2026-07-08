@@ -30,6 +30,16 @@ const fromHex = (h: string): [number, number, number] => [
 ]
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
 
+/** กรอบ export คงที่ใน viewport (จัดกึ่งกลาง คงอัตราส่วนขนาด export) */
+function fixedFrameView(sw: number, sh: number) {
+  const pad = 18
+  const aspect = sw / sh
+  let fw = VIEW_W - pad * 2
+  let fh = fw / aspect
+  if (fh > VIEW_H - pad * 2) { fh = VIEW_H - pad * 2; fw = fh * aspect }
+  return { x: (VIEW_W - fw) / 2, y: (VIEW_H - fh) / 2, w: fw, h: fh }
+}
+
 /** ไอคอนแปรงวงกลม พร้อมเครื่องหมาย - (ลบ) หรือ + (คืนค่า) */
 function BrushIcon({ sign, size = 16 }: { sign: '-' | '+'; size?: number }) {
   return (
@@ -48,7 +58,7 @@ export function EditScreen() {
   const stickerW = useStore((s) => s.stickerW)
   const stickerH = useStore((s) => s.stickerH)
   const frameMargin = useStore((s) => s.frameMargin)
-  const { setScreen, setMethod, setTolerance, setChromaColor, setBorder, setEnhance, updateMask, recomputeMask, reframe } = useStore()
+  const { setScreen, setMethod, setTolerance, setChromaColor, setBorder, setEnhance, setLayout, updateMask, recomputeMask, reframe } = useStore()
 
   const [showReframe, setShowReframe] = useState(false)
 
@@ -72,12 +82,17 @@ export function EditScreen() {
   const strokeSnapshot = useRef<Uint8ClampedArray | null>(null)
   const undoStack = useRef<Uint8ClampedArray[]>([])
   const redoStack = useRef<Uint8ClampedArray[]>([])
+  /** โหมดจัดวางในกรอบคงที่ (manual layout) */
+  const alignRef = useRef(false)
+  const dimsRef = useRef({ w: 370, h: 320, margin: 10 })
+  const captureTimer = useRef<number | null>(null)
 
   const [tool, setTool] = useState<Tool>('erase')
   const [brush, setBrush] = useState(16)
   const [zoomPct, setZoomPct] = useState(100)
   const [showGhost, setShowGhost] = useState(true)
   const [showFrame, setShowFrame] = useState(true)
+  const [alignMode, setAlignMode] = useState(false)
   const [magicTol, setMagicTol] = useState(DEFAULT_MAGIC.hueTol)
   const [edgeErode, setEdgeErode] = useState(2)
   const [, setHistTick] = useState(0)
@@ -85,6 +100,7 @@ export function EditScreen() {
 
   const w = sticker?.maskWidth ?? 0
   const h = sticker?.maskHeight ?? 0
+  dimsRef.current = { w: stickerW, h: stickerH, margin: frameMargin }
 
   // ---- สร้าง preview offscreen (die-cut + ghost ภาพต้นฉบับจางๆ) ----
   const buildPreview = useCallback(() => {
@@ -134,7 +150,33 @@ export function EditScreen() {
     ctx.strokeStyle = 'rgba(0,0,0,0.15)'
     ctx.lineWidth = 1
     ctx.strokeRect(tx + 0.5, ty + 0.5, off.width * scale, off.height * scale)
-    // กรอบ export (ตามอัตราส่วนขนาดสติกเกอร์) + เขตปลอดภัยเว้นขอบ
+    if (alignRef.current) {
+      // โหมดจัดวาง: กรอบ export "คงที่" — รูปเลื่อน/ซูมใต้กรอบ
+      const d = dimsRef.current
+      const F = fixedFrameView(d.w, d.h)
+      // มืดนอกกรอบ (letterbox)
+      ctx.save()
+      ctx.fillStyle = 'rgba(0,0,0,0.30)'
+      ctx.beginPath()
+      ctx.rect(0, 0, VIEW_W, VIEW_H)
+      ctx.rect(F.x, F.y, F.w, F.h)
+      ctx.fill('evenodd')
+      ctx.restore()
+      // กรอบ export (ฟ้า)
+      ctx.lineWidth = 2
+      ctx.setLineDash([])
+      ctx.strokeStyle = 'rgba(20,120,255,0.95)'
+      ctx.strokeRect(F.x + 0.5, F.y + 0.5, F.w, F.h)
+      // เขตปลอดภัยเว้นขอบ (แดงประ)
+      const mx = F.w * (d.margin / d.w)
+      const my = F.h * (d.margin / d.h)
+      ctx.setLineDash([6, 4])
+      ctx.strokeStyle = 'rgba(230,30,30,0.95)'
+      ctx.strokeRect(F.x + mx + 0.5, F.y + my + 0.5, F.w - mx * 2, F.h - my * 2)
+      ctx.setLineDash([])
+      return
+    }
+    // โหมดอัตโนมัติ: กรอบ export ตามตำแหน่ง bbox ของตัวสติกเกอร์ (เลื่อนตามภาพ)
     const fr = frameRef.current
     if (fr) {
       const vx = (ix: number) => ix * scale + tx
@@ -160,6 +202,28 @@ export function EditScreen() {
     renderView()
   }, [renderView])
 
+  // ---- โหมดจัดวาง: บันทึกตำแหน่ง/สเกลปัจจุบันในกรอบคงที่ลง layout (WYSIWYG) ----
+  const captureLayout = () => {
+    if (!sticker || !alignRef.current) return
+    const d = dimsRef.current
+    const F = fixedFrameView(d.w, d.h)
+    const r = d.w / F.w // view px -> export px
+    setLayout(sticker.id, {
+      k: view.current.scale * r,
+      ox: (view.current.tx - F.x) * r,
+      oy: (view.current.ty - F.y) * r,
+      frameW: d.w,
+      frameH: d.h,
+    })
+  }
+  const captureRef = useRef(captureLayout)
+  captureRef.current = captureLayout
+  const scheduleCapture = useCallback(() => {
+    if (!alignRef.current) return
+    if (captureTimer.current) window.clearTimeout(captureTimer.current)
+    captureTimer.current = window.setTimeout(() => captureRef.current(), 140)
+  }, [])
+
   // ซูมไปที่ scale เป้าหมาย โดยตรึงจุด (vx,vy) ในหน้าจอไว้กับที่
   const zoomTo = useCallback((targetScale: number, vx: number, vy: number) => {
     const v = view.current
@@ -170,7 +234,8 @@ export function EditScreen() {
     v.scale = ns
     setZoomPct(Math.round(ns * 100))
     renderView()
-  }, [renderView])
+    scheduleCapture()
+  }, [renderView, scheduleCapture])
 
   // คำนวณกรอบ export + เขตปลอดภัย ในพิกัดภาพต้นฉบับ (ให้ตรงกับ pipeline export)
   const computeFrame = useCallback(() => {
@@ -218,6 +283,54 @@ export function EditScreen() {
     fitView(sticker.source.width, sticker.source.height)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sticker?.source])
+
+  // sync โหมดจัดวางเมื่อเปลี่ยนสติกเกอร์ — ถ้ามี layout เดิม ให้กู้ view ให้ตรงตำแหน่งที่จัดไว้
+  useEffect(() => {
+    const L = sticker?.layout ?? null
+    alignRef.current = !!L
+    setAlignMode(!!L)
+    if (L) {
+      const F = fixedFrameView(L.frameW, L.frameH)
+      const rv = F.w / L.frameW // export px -> view px
+      view.current = { scale: L.k * rv, tx: F.x + L.ox * rv, ty: F.y + L.oy * rv }
+      setZoomPct(Math.round(view.current.scale * 100))
+      renderView()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sticker?.id])
+
+  // เปิด/ปิดโหมดจัดวางในกรอบ
+  function toggleAlign() {
+    if (!sticker) return
+    if (alignMode) {
+      alignRef.current = false
+      setAlignMode(false)
+      setLayout(sticker.id, null) // กลับไปจัดกึ่งกลางอัตโนมัติ
+      setTool('erase')
+      renderView()
+      return
+    }
+    alignRef.current = true
+    setAlignMode(true)
+    setTool('pan') // ลาก = เลื่อนรูปในกรอบ
+    const d = dimsRef.current
+    const F = fixedFrameView(d.w, d.h)
+    if (sticker.layout && sticker.layout.frameW === d.w && sticker.layout.frameH === d.h) {
+      // มี layout เดิม -> กู้ตำแหน่ง
+      const L = sticker.layout
+      const rv = F.w / L.frameW
+      view.current = { scale: L.k * rv, tx: F.x + L.ox * rv, ty: F.y + L.oy * rv }
+    } else {
+      // เริ่มต้น: fit ทั้งภาพลงกรอบ (เว้นขอบตาม margin)
+      const iw = sticker.source.width, ih = sticker.source.height
+      const mx = F.w * (d.margin / d.w), my = F.h * (d.margin / d.h)
+      const s = Math.min((F.w - mx * 2) / iw, (F.h - my * 2) / ih)
+      view.current = { scale: s, tx: F.x + (F.w - iw * s) / 2, ty: F.y + (F.h - ih * s) / 2 }
+    }
+    setZoomPct(Math.round(view.current.scale * 100))
+    renderView()
+    captureRef.current()
+  }
 
   // sync working mask เมื่อ mask ใน store เปลี่ยน (เช่นหลัง recompute/บันทึกแปรง)
   useEffect(() => {
@@ -427,6 +540,7 @@ export function EditScreen() {
       view.current.ty = cy - (p.cy0 - p.ty0) * k
       setZoomPct(Math.round(ns * 100))
       renderView()
+      scheduleCapture()
       return
     }
 
@@ -447,7 +561,7 @@ export function EditScreen() {
     if (e) pointers.current.delete(e.pointerId)
     else pointers.current.clear()
     if (pinch.current && pointers.current.size < 2) pinch.current = null
-    if (panning.current) { panning.current = null; return }
+    if (panning.current) { panning.current = null; scheduleCapture(); return }
     commitStroke()
   }
 
@@ -572,6 +686,9 @@ export function EditScreen() {
               onClick={() => zoomToScale(1)} title="ขนาดจริง 100%">1:1</button>
             <button className={tool === 'pan' ? 'toolbtn active' : 'toolbtn'} style={{ padding: '4px 8px' }}
               onClick={() => setTool(tool === 'pan' ? 'erase' : 'pan')}>✋</button>
+            <button className={alignMode ? 'toolbtn active' : 'toolbtn'} style={{ padding: '4px 8px' }}
+              onClick={toggleAlign}
+              title="จัดวางรูปในกรอบ export เอง — กรอบคงที่ เลื่อน/ซูมรูปเพื่อจัดตำแหน่งและขนาด">🎯 จัดวาง</button>
             <span style={{ width: 1, height: 22, background: 'var(--line)' }} />
             <button className="btn-ghost" style={{ padding: '4px 8px' }} disabled={!canUndo} onClick={undo} title="เลิกทำ (Ctrl+Z)">↶</button>
             <button className="btn-ghost" style={{ padding: '4px 8px' }} disabled={!canRedo} onClick={redo} title="ทำซ้ำ (Ctrl+Y)">↷</button>
@@ -610,7 +727,13 @@ export function EditScreen() {
             <span className="m-only"> · 2 นิ้ว=ซูม/เลื่อน</span>
             {' · '}{w}×{h}px
           </div>
-          {showFrame && (
+          {alignMode ? (
+            <div className="help" style={{ marginTop: 2 }}>
+              🎯 <b>โหมดจัดวาง</b> — กรอบ <span style={{ color: 'rgb(20,120,255)', fontWeight: 700 }}>export {stickerW}×{stickerH}</span> คงที่
+              · เลื่อน/ซูม<b>รูป</b>เพื่อจัดตำแหน่งและขนาดในกรอบ · สิ่งที่เห็นในกรอบ = ผลลัพธ์ export
+              · <span style={{ color: 'rgb(230,30,30)', fontWeight: 700 }}>เส้นแดง = เว้นขอบ {frameMargin}px</span>
+            </div>
+          ) : showFrame && (
             <div className="help" style={{ marginTop: 2 }}>
               <span style={{ color: 'rgb(20,120,255)', fontWeight: 700 }}>▭ กรอบ export {stickerW}×{stickerH}</span>
               {' · '}
@@ -750,6 +873,8 @@ export function EditScreen() {
           onClick={() => setTool('magic')} title="ลบสีอัตโนมัติ (จิ้มสี)">🪄</button>
         <button className={tool === 'pan' ? 'toolbtn active' : 'toolbtn'}
           onClick={() => setTool(tool === 'pan' ? 'erase' : 'pan')} title="เลื่อนภาพ">✋</button>
+        <button className="toolbtn" onClick={smoothEdges}
+          title={`ทำขอบให้เนียน/ตัดขอบเงา (กัดขอบเข้า ${edgeErode}px)`}>✨</button>
         <span className="sep" />
         <button className="toolbtn" disabled={!canUndo} onClick={undo} title="เลิกทำ">↶</button>
         <button className="toolbtn" disabled={!canRedo} onClick={redo} title="ทำซ้ำ">↷</button>
