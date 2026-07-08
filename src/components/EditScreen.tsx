@@ -5,6 +5,7 @@ import { enhanceRgb } from '../lib/color'
 import { magicErase, featherMask, erodeMask, DEFAULT_MAGIC } from '../lib/magic'
 import { ReframeModal } from './ReframeModal'
 import { StickerThumb } from './StickerThumb'
+import { NumberField } from './NumberField'
 
 type Tool = 'erase' | 'restore' | 'pick' | 'pan' | 'magic'
 const MAX_HISTORY = 10
@@ -676,9 +677,9 @@ export function EditScreen() {
               onChange={(e) => zoomToScale(sliderToScale(+e.target.value))}
               className="m-hide" style={{ width: 120 }} title="ปรับซูมละเอียด" />
             <button className="btn-ghost" style={{ padding: '4px 8px' }} onClick={() => zoomStep(1)} title="ซูมเข้า 1%">➕</button>
-            <input type="number" value={zoomPct} min={5} max={3200} step={1}
-              onChange={(e) => zoomToScale(clamp(+e.target.value, 5, 3200) / 100)}
-              style={{ width: 62 }} title="พิมพ์ % ได้ละเอียด 1%" />
+            <NumberField value={zoomPct} min={5} max={3200}
+              onCommit={(v) => zoomToScale(v / 100)}
+              width={62} title="พิมพ์ % ได้ละเอียด 1%" />
             <span className="help">%</span>
             <button className="btn-ghost" style={{ padding: '4px 8px' }}
               onClick={() => fitView(sticker.source.width, sticker.source.height)}>⤢ พอดี</button>

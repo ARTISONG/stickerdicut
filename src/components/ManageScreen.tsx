@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { SIZE_PRESETS, toEven } from '../constants'
 import { UploadZone } from './UploadZone'
 import { StickerThumb } from './StickerThumb'
+import { NumberField } from './NumberField'
 
 export function ManageScreen() {
   const meta = useStore((s) => s.meta)
@@ -46,13 +47,13 @@ export function ManageScreen() {
             <>
               <div className="field">
                 <label>กว้าง (px)</label>
-                <input type="number" min={2} step={2} value={stickerW}
-                  onChange={(e) => setStickerSize(toEven(+e.target.value), stickerH)} style={{ width: 100 }} />
+                <NumberField value={stickerW} min={2} normalize={toEven}
+                  onCommit={(v) => setStickerSize(v, stickerH)} width={100} />
               </div>
               <div className="field">
                 <label>สูง (px)</label>
-                <input type="number" min={2} step={2} value={stickerH}
-                  onChange={(e) => setStickerSize(stickerW, toEven(+e.target.value))} style={{ width: 100 }} />
+                <NumberField value={stickerH} min={2} normalize={toEven}
+                  onCommit={(v) => setStickerSize(stickerW, v)} width={100} />
               </div>
             </>
           )}
@@ -77,17 +78,17 @@ export function ManageScreen() {
             <hr className="hr" />
             <div className="row" style={{ alignItems: 'flex-end' }}>
               <div className="field"><label>รูปหลัก (main) กว้าง</label>
-                <input type="number" min={2} step={2} value={mainW}
-                  onChange={(e) => setMainSize(toEven(+e.target.value), mainH)} style={{ width: 90 }} /></div>
+                <NumberField value={mainW} min={2} normalize={toEven}
+                  onCommit={(v) => setMainSize(v, mainH)} width={90} /></div>
               <div className="field"><label>สูง</label>
-                <input type="number" min={2} step={2} value={mainH}
-                  onChange={(e) => setMainSize(mainW, toEven(+e.target.value))} style={{ width: 90 }} /></div>
+                <NumberField value={mainH} min={2} normalize={toEven}
+                  onCommit={(v) => setMainSize(mainW, v)} width={90} /></div>
               <div className="field" style={{ marginLeft: 12 }}><label>รูปแท็บ (tab) กว้าง</label>
-                <input type="number" min={2} step={2} value={tabW}
-                  onChange={(e) => setTabSize(toEven(+e.target.value), tabH)} style={{ width: 90 }} /></div>
+                <NumberField value={tabW} min={2} normalize={toEven}
+                  onCommit={(v) => setTabSize(v, tabH)} width={90} /></div>
               <div className="field"><label>สูง</label>
-                <input type="number" min={2} step={2} value={tabH}
-                  onChange={(e) => setTabSize(tabW, toEven(+e.target.value))} style={{ width: 90 }} /></div>
+                <NumberField value={tabH} min={2} normalize={toEven}
+                  onCommit={(v) => setTabSize(tabW, v)} width={90} /></div>
               <div className="help" style={{ alignSelf: 'center' }}>ค่าเริ่มต้น: main 240×240 · tab 96×74</div>
             </div>
           </>

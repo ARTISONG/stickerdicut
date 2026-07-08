@@ -5,6 +5,7 @@ import { fileToImageBitmap, cropCanvas } from '../lib/canvas'
 import { findBlobs } from '../lib/segment'
 import { chromaKeyMask } from '../lib/chroma'
 import { DEFAULT_CHROMA_TOLERANCE } from '../constants'
+import { NumberField } from './NumberField'
 
 type Mode = 'single' | 'grid' | 'auto' | 'crop'
 
@@ -133,13 +134,11 @@ export function UploadZone() {
           <div className="row" style={{ marginBottom: 14 }}>
             <div className="field">
               <label>คอลัมน์ (แนวนอน)</label>
-              <input type="number" min={1} max={12} value={cols}
-                onChange={(e) => setCols(Math.max(1, +e.target.value))} style={{ width: 90 }} />
+              <NumberField value={cols} min={1} max={12} onCommit={setCols} width={90} />
             </div>
             <div className="field">
               <label>แถว (แนวตั้ง)</label>
-              <input type="number" min={1} max={12} value={rows}
-                onChange={(e) => setRows(Math.max(1, +e.target.value))} style={{ width: 90 }} />
+              <NumberField value={rows} min={1} max={12} onCommit={setRows} width={90} />
             </div>
             <div className="help" style={{ alignSelf: 'end' }}>
               จะได้ {cols * rows} ตัว/ชีต
