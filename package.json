@@ -14,6 +14,7 @@
     "jszip": "^3.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "upng-js": "^2.1.0",
     "zustand": "^4.5.5"
   },
   "devDependencies": {

@@ -19,6 +19,29 @@ function crc32(bytes: Uint8Array): number {
 }
 
 /**
+ * ตั้งจำนวนรอบเล่นของ APNG (num_plays ใน acTL chunk)
+ * @param loops จำนวนรอบ (0 = วนไม่จำกัด, LINE ต้องการ 1-4)
+ */
+export function setApngLoops(bytes: Uint8Array, loops: number): Uint8Array {
+  const out = bytes.slice()
+  const dv = new DataView(out.buffer, out.byteOffset)
+  let pos = 8 // ข้าม PNG signature
+  while (pos + 8 <= out.length) {
+    const len = dv.getUint32(pos)
+    // type "acTL" = 0x61 0x63 0x54 0x4c
+    if (out[pos + 4] === 0x61 && out[pos + 5] === 0x63 && out[pos + 6] === 0x54 && out[pos + 7] === 0x4c) {
+      dv.setUint32(pos + 8 + 4, loops >>> 0) // num_plays
+      // คำนวณ CRC ใหม่ (คลุม type + data)
+      const crc = crc32(out.subarray(pos + 4, pos + 8 + len))
+      dv.setUint32(pos + 8 + len, crc)
+      break
+    }
+    pos += 8 + len + 4 // length + type + data + crc
+  }
+  return out
+}
+
+/**
  * แทรก/แทนที่ pHYs chunk เพื่อกำหนด DPI
  * @param dpi จุดต่อนิ้ว (default 72)
  */

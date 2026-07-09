@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CutMethod, OriginRef, ProjectMeta, Rect, Screen, Sticker, StickerLayout } from './types'
+import type { ApngFrame, CutMethod, OriginRef, ProjectMeta, Rect, Screen, Sticker, StickerLayout } from './types'
 import { DEFAULT_BORDER, DEFAULT_CHROMA_TOLERANCE, DEFAULT_MARGIN, SIZE_PRESETS, SPEC, toEven } from './constants'
 import { computeMask } from './lib/pipeline'
 import { cropCanvas } from './lib/canvas'
@@ -35,6 +35,14 @@ interface State {
   cropQueue: (ImageBitmap | HTMLCanvasElement)[]
   /** ความคืบหน้าการตัด AI ทั้งชุด */
   aiBatch: { done: number; total: number } | null
+  /** กล่องเฟรมของเครื่องมือ APNG (เริ่ม 4 กล่อง, สูงสุด 20) */
+  apngFrames: ApngFrame[]
+  /** ขนาดผืนผ้าใบ APNG */
+  apngW: number
+  apngH: number
+  /** หน่วงเวลาต่อเฟรม (ms) และจำนวนรอบเล่น */
+  apngDelay: number
+  apngLoops: number
 
   setScreen: (s: Screen) => void
   setName: (name: string) => void
@@ -67,7 +75,21 @@ interface State {
 
   setMain: (id: string) => void
   setTab: (id: string) => void
+
+  apngAddSlot: () => void
+  /** ลบกล่อง (ถ้าเหลือ 4 กล่อง จะล้างรูปแทนการลบกล่อง) */
+  apngRemoveSlot: (id: string) => void
+  /** เติมรูปตั้งแต่กล่อง startId ไล่ไปกล่องว่างถัดไป (เพิ่มกล่องใหม่ให้ถ้าจำเป็น ≤20) */
+  apngFillImages: (startId: string, items: { image: ImageBitmap; name: string; bbox: Rect }[]) => void
+  apngSetManual: (id: string, t: { k: number; ox: number; oy: number } | null) => void
+  apngSetSize: (w: number, h: number) => void
+  apngSetDelay: (d: number) => void
+  apngSetLoops: (l: number) => void
 }
+
+const APNG_MIN_SLOTS = 4
+const APNG_MAX_SLOTS = 20
+const makeSlot = (): ApngFrame => ({ id: uid(), image: null, name: '', bbox: null, manual: null })
 
 const initialMeta: ProjectMeta = {
   name: 'dicut-stickers',
@@ -92,6 +114,11 @@ export const useStore = create<State>((set, get) => ({
   tabH: SPEC.TAB.height,
   cropQueue: [],
   aiBatch: null,
+  apngFrames: Array.from({ length: APNG_MIN_SLOTS }, makeSlot),
+  apngW: 320,
+  apngH: 270,
+  apngDelay: 125,
+  apngLoops: 4,
 
   setScreen: (screen) => set({ screen }),
   setName: (name) => set((s) => ({ meta: { ...s.meta, name } })),
@@ -272,4 +299,53 @@ export const useStore = create<State>((set, get) => ({
 
   setMain: (id) => set((s) => ({ meta: { ...s.meta, mainStickerId: id } })),
   setTab: (id) => set((s) => ({ meta: { ...s.meta, tabStickerId: id } })),
+
+  apngAddSlot: () =>
+    set((s) =>
+      s.apngFrames.length >= APNG_MAX_SLOTS ? s : { apngFrames: [...s.apngFrames, makeSlot()] },
+    ),
+
+  apngRemoveSlot: (id) =>
+    set((s) => {
+      if (s.apngFrames.length > APNG_MIN_SLOTS) {
+        return { apngFrames: s.apngFrames.filter((f) => f.id !== id) }
+      }
+      // เหลือขั้นต่ำ -> ล้างรูปในกล่องแทน
+      return {
+        apngFrames: s.apngFrames.map((f) =>
+          f.id === id ? { ...f, image: null, name: '', bbox: null, manual: null } : f,
+        ),
+      }
+    }),
+
+  apngFillImages: (startId, items) =>
+    set((s) => {
+      const frames = s.apngFrames.map((f) => ({ ...f }))
+      let idx = frames.findIndex((f) => f.id === startId)
+      if (idx < 0) idx = 0
+      let first = true
+      for (const it of items) {
+        if (!first) {
+          // รูปถัดไป: หากล่องว่างตั้งแต่ตำแหน่งปัจจุบัน ไม่มีก็เพิ่มกล่องใหม่ (≤20)
+          while (idx < frames.length && frames[idx].image) idx++
+          if (idx >= frames.length) {
+            if (frames.length >= APNG_MAX_SLOTS) break
+            frames.push(makeSlot())
+          }
+        }
+        frames[idx] = { ...frames[idx], image: it.image, name: it.name, bbox: it.bbox, manual: null }
+        idx++
+        first = false
+      }
+      return { apngFrames: frames }
+    }),
+
+  apngSetManual: (id, t) =>
+    set((s) => ({
+      apngFrames: s.apngFrames.map((f) => (f.id === id ? { ...f, manual: t } : f)),
+    })),
+
+  apngSetSize: (w, h) => set({ apngW: toEven(w), apngH: toEven(h) }),
+  apngSetDelay: (d) => set({ apngDelay: Math.max(20, d) }),
+  apngSetLoops: (l) => set({ apngLoops: Math.max(0, Math.min(4, l)) }),
 }))

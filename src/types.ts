@@ -89,4 +89,16 @@ export interface ProjectMeta {
   tabStickerId: string | null
 }
 
-export type Screen = 'manage' | 'crop' | 'edit' | 'export'
+export type Screen = 'manage' | 'crop' | 'edit' | 'export' | 'apng'
+
+/** กล่องเฟรมของเครื่องมือ APNG (แยกอิสระจากชุดสติกเกอร์) */
+export interface ApngFrame {
+  id: string
+  /** รูปในกล่อง (null = ยังว่าง) */
+  image: ImageBitmap | null
+  name: string
+  /** กรอบเนื้อหา (bbox ของ alpha) ในพิกัดภาพ — ใช้จัดตำแหน่งอัตโนมัติ */
+  bbox: Rect | null
+  /** ปรับ pan/zoom เอง (override อัตโนมัติ) ในพิกัดผืนผ้าใบ output */
+  manual: { k: number; ox: number; oy: number } | null
+}
